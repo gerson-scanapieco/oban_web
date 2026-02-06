@@ -34,3 +34,7 @@ priv/static/*
 # Standalone Docker build artifacts
 /standalone/_build/
 /standalone/deps/
+
+# Ignore local Claude configs
+.claude/
+
