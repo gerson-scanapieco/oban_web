@@ -113,6 +113,30 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
       end
     end
 
+    describe "dep_jobs/3" do
+      test "resolving dep names to job ids within a workflow" do
+        wf_id = Ecto.UUID.generate()
+
+        job_a = insert!(%{}, meta: %{workflow_id: wf_id, name: "step_a"})
+        job_b = insert!(%{}, meta: %{workflow_id: wf_id, name: "step_b"})
+        _other = insert!(%{}, meta: %{workflow_id: Ecto.UUID.generate(), name: "step_a"})
+
+        result = WorkflowQuery.dep_jobs(@conf, wf_id, ["step_a", "step_b"])
+
+        assert result == %{"step_a" => job_a.id, "step_b" => job_b.id}
+      end
+
+      test "returning partial results when some deps are missing" do
+        wf_id = Ecto.UUID.generate()
+
+        job_a = insert!(%{}, meta: %{workflow_id: wf_id, name: "step_a"})
+
+        result = WorkflowQuery.dep_jobs(@conf, wf_id, ["step_a", "step_missing"])
+
+        assert result == %{"step_a" => job_a.id}
+      end
+    end
+
     describe "parse/1" do
       import WorkflowQuery, only: [parse: 1]
 

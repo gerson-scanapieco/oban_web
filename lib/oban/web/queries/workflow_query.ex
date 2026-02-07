@@ -80,6 +80,28 @@ defmodule Oban.Web.WorkflowQuery do
 
   # Querying
 
+  def dep_jobs(conf, workflow_id, dep_names) when is_list(dep_names) do
+    query = dep_jobs_query(conf, workflow_id, dep_names)
+
+    conf
+    |> Repo.all(query)
+    |> Map.new(fn %{name: name, id: id} -> {name, id} end)
+  end
+
+  defp dep_jobs_query(conf, workflow_id, dep_names) when is_mysql(conf) or is_sqlite(conf) do
+    Job
+    |> where([j], fragment("json_extract(?, '$.workflow_id')", j.meta) == ^workflow_id)
+    |> where([j], fragment("json_extract(?, '$.name')", j.meta) in ^dep_names)
+    |> select([j], %{name: fragment("json_extract(?, '$.name')", j.meta), id: j.id})
+  end
+
+  defp dep_jobs_query(_conf, workflow_id, dep_names) do
+    Job
+    |> where([j], fragment("?->>'workflow_id'", j.meta) == ^workflow_id)
+    |> where([j], fragment("?->>'name'", j.meta) in ^dep_names)
+    |> select([j], %{name: fragment("?->>'name'", j.meta), id: j.id})
+  end
+
   def all_workflows(params, conf, _opts \\ []) do
     params = params_with_defaults(params)
 
