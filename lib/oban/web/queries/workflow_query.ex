@@ -111,6 +111,7 @@ defmodule Oban.Web.WorkflowQuery do
       query
       |> filter_ids(params, conf)
       |> filter_names(params, conf)
+      |> order_query(params)
       |> limit(^params.limit)
 
     conf
@@ -185,6 +186,15 @@ defmodule Oban.Web.WorkflowQuery do
       discarded: fragment("count(*) FILTER (WHERE ? = 'discarded')", j.state)
     })
   end
+
+  defp order_query(query, %{sort_by: :time, sort_dir: :desc}),
+    do: order_by(query, [j], desc: min(j.attempted_at))
+
+  defp order_query(query, %{sort_by: :time, sort_dir: :asc}),
+    do: order_by(query, [j], asc: min(j.attempted_at))
+
+  defp order_query(query, _params),
+    do: order_by(query, [j], desc: min(j.attempted_at))
 
   defp filter_ids(query, %{ids: ids}, conf)
        when is_list(ids) and ids != [] do

@@ -98,6 +98,31 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
         assert List.first(ids) == wf_new
       end
 
+      test "limit returns the most recent workflows" do
+        now = DateTime.utc_now()
+
+        old_ids =
+          for i <- 1..3 do
+            id = Ecto.UUID.generate()
+            insert!(%{}, meta: %{workflow_id: id}, attempted_at: DateTime.add(now, -3600 - i))
+            id
+          end
+
+        new_ids =
+          for i <- 1..2 do
+            id = Ecto.UUID.generate()
+            insert!(%{}, meta: %{workflow_id: id}, attempted_at: DateTime.add(now, -i))
+            id
+          end
+
+        workflows = WorkflowQuery.all_workflows(%{limit: 2}, @conf)
+        ids = Enum.map(workflows, & &1.id)
+
+        assert length(ids) == 2
+        assert Enum.all?(new_ids, &(&1 in ids))
+        refute Enum.any?(old_ids, &(&1 in ids))
+      end
+
       test "counting states correctly" do
         wf_id = Ecto.UUID.generate()
 
