@@ -13,6 +13,7 @@ import Shortcuts from "./hooks/shortcuts";
 import SidebarResizer from "./hooks/sidebar_resizer";
 import Themer from "./hooks/themer";
 import Tippy from "./hooks/tippy";
+import WorkflowGraph from "./hooks/workflow_graph";
 
 const hooks = {
   Charter,
@@ -25,6 +26,7 @@ const hooks = {
   SidebarResizer,
   Themer,
   Tippy,
+  WorkflowGraph,
 };
 
 // Topbar ---

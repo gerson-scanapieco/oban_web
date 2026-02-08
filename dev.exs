@@ -481,6 +481,140 @@ defmodule Oban.Workers.WeeklyUpdate do
   end
 end
 
+# Workflow Workers
+
+defmodule Oban.Workers.DataPipeline do
+  @moduledoc false
+
+  use Oban.Pro.Worker, queue: :default
+
+  alias WebDev.Generator
+
+  def gen(opts \\ []) do
+    new(%{source: Faker.Internet.domain_name(), records: Enum.random(100..10_000)}, opts)
+  end
+
+  @impl Oban.Pro.Worker
+  def process(_job), do: Generator.random_perform(1_000, 5_000)
+end
+
+defmodule Oban.Workers.ReportBuilder do
+  @moduledoc false
+
+  use Oban.Pro.Worker, queue: :exports
+
+  alias WebDev.Generator
+
+  def gen(opts \\ []) do
+    new(%{report: Faker.Company.bullshit(), format: Enum.random(~w(pdf csv xlsx))}, opts)
+  end
+
+  @impl Oban.Pro.Worker
+  def process(_job), do: Generator.random_perform(2_000, 8_000)
+end
+
+defmodule Oban.Workers.NotificationSender do
+  @moduledoc false
+
+  use Oban.Pro.Worker, queue: :events
+
+  alias WebDev.Generator
+
+  def gen(opts \\ []) do
+    new(%{recipient: Faker.Internet.email(), channel: Enum.random(~w(email sms push))}, opts)
+  end
+
+  @impl Oban.Pro.Worker
+  def process(_job), do: Generator.random_perform(500, 3_000)
+end
+
+defmodule WebDev.WorkflowGenerator do
+  use GenServer
+
+  alias Oban.Pro.Workflow
+
+  @min_delay 5_000
+  @max_delay 30_000
+
+  @workflow_names [
+    "data_pipeline",
+    "report_generation",
+    "user_onboarding",
+    "nightly_sync",
+    "order_processing",
+    "invoice_cycle",
+    "content_publish",
+    "analytics_refresh"
+  ]
+
+  @spec start_link(Keyword.t()) :: GenServer.on_start()
+  def start_link(opts) do
+    {name, opts} = Keyword.pop(opts, :name, __MODULE__)
+
+    GenServer.start_link(__MODULE__, opts, name: name)
+  end
+
+  @impl GenServer
+  def init(_opts) do
+    schedule_generation()
+
+    {:ok, []}
+  end
+
+  @impl GenServer
+  def handle_info(:generate, state) do
+    generate_workflow()
+    schedule_generation()
+
+    {:noreply, state}
+  end
+
+  defp schedule_generation do
+    delay = Enum.random(@min_delay..@max_delay)
+
+    Process.send_after(self(), :generate, delay)
+  end
+
+  defp generate_workflow do
+    name = Enum.random(@workflow_names)
+    pattern = Enum.random([:sequential, :fan_out, :diamond])
+
+    wf = Workflow.new(workflow_name: name)
+    wf = build_pattern(wf, pattern)
+
+    Oban.insert_all(wf.changesets)
+  end
+
+  defp build_pattern(wf, :sequential) do
+    wf
+    |> Workflow.add("extract", Oban.Workers.DataPipeline.gen())
+    |> Workflow.add("transform", Oban.Workers.DataPipeline.gen(), deps: ["extract"])
+    |> Workflow.add("load", Oban.Workers.DataPipeline.gen(), deps: ["transform"])
+    |> Workflow.add("notify", Oban.Workers.NotificationSender.gen(), deps: ["load"])
+  end
+
+  defp build_pattern(wf, :fan_out) do
+    wf
+    |> Workflow.add("fetch", Oban.Workers.DataPipeline.gen())
+    |> Workflow.add("report_pdf", Oban.Workers.ReportBuilder.gen(), deps: ["fetch"])
+    |> Workflow.add("report_csv", Oban.Workers.ReportBuilder.gen(), deps: ["fetch"])
+    |> Workflow.add("report_xlsx", Oban.Workers.ReportBuilder.gen(), deps: ["fetch"])
+    |> Workflow.add("notify", Oban.Workers.NotificationSender.gen(),
+      deps: ["report_pdf", "report_csv", "report_xlsx"]
+    )
+  end
+
+  defp build_pattern(wf, :diamond) do
+    wf
+    |> Workflow.add("ingest", Oban.Workers.DataPipeline.gen())
+    |> Workflow.add("analyze", Oban.Workers.DataPipeline.gen(), deps: ["ingest"])
+    |> Workflow.add("report", Oban.Workers.ReportBuilder.gen(), deps: ["ingest"])
+    |> Workflow.add("deliver", Oban.Workers.NotificationSender.gen(),
+      deps: ["analyze", "report"]
+    )
+  end
+end
+
 # Repo
 
 defmodule WebDev.Repo do
@@ -498,9 +632,9 @@ end
 defmodule WebDev.Migration1 do
   use Ecto.Migration
 
-  def up, do: Oban.Pro.Migration.up()
+  def up, do: Oban.Pro.Migration.up(version: "1.6.0")
 
-  def down, do: Oban.Pro.Migration.down()
+  def down, do: Oban.Pro.Migration.down(version: "1.6.0")
 end
 
 # Phoenix
@@ -574,7 +708,7 @@ Application.put_env(:oban_web, WebDev.Endpoint,
   ]
 )
 
-Application.put_env(:oban_web, WebDev.Repo, url: "postgres://localhost:5432/oban_web_dev")
+Application.put_env(:oban_web, WebDev.Repo, url: "postgres://postgres:postgres@localhost:5432/oban_web_dev")
 Application.put_env(:phoenix, :serve_endpoints, true)
 Application.put_env(:phoenix, :persistent, true)
 
@@ -625,6 +759,7 @@ Task.async(fn ->
     {Oban, oban_opts},
     {Oban, slow_oban_opts},
     {WebDev.Generator, []},
+    {WebDev.WorkflowGenerator, []},
     {WebDev.Endpoint, []}
   ]
 

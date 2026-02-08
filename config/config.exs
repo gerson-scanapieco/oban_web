@@ -36,7 +36,8 @@ config :oban_web, Oban.Web.Repo,
   priv: "test/support/postgres",
   show_sensitive_data_on_connection_error: true,
   stacktrace: true,
-  url: System.get_env("POSTGRES_URL") || "postgres://localhost:5432/oban_web_test"
+  url:
+    System.get_env("POSTGRES_URL") || "postgres://postgres:postgres@localhost:5432/oban_web_test"
 
 config :oban_web, Oban.Web.SQLiteRepo,
   database: "priv/oban_web_test.db",
@@ -49,4 +50,4 @@ config :oban_web, Oban.Web.MyXQLRepo,
   pool: Ecto.Adapters.SQL.Sandbox,
   show_sensitive_data_on_connection_error: true,
   stacktrace: true,
-  url: System.get_env("MYSQL_URL") || "mysql://root@localhost:3306/oban_web_test"
+  url: System.get_env("MYSQL_URL") || "mysql://root:mysql@localhost:3306/oban_web_test"

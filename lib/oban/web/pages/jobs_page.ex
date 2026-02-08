@@ -45,6 +45,7 @@ defmodule Oban.Web.JobsPage do
             <.live_component
               id="detail"
               access={@access}
+              conf={@conf}
               job={@detailed}
               module={DetailComponent}
               os_time={@os_time}
