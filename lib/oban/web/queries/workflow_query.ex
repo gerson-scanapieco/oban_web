@@ -139,6 +139,11 @@ defmodule Oban.Web.WorkflowQuery do
       workflow_name: fragment("min(json_extract(?, '$.workflow_name'))", j.meta),
       total: count(),
       first_attempted_at: min(j.attempted_at),
+      first_inserted_at: min(j.inserted_at),
+      first_scheduled_at: min(j.scheduled_at),
+      last_cancelled_at: max(j.cancelled_at),
+      last_completed_at: max(j.completed_at),
+      last_discarded_at: max(j.discarded_at),
       executing: fragment("SUM(CASE WHEN ? = 'executing' THEN 1 ELSE 0 END)", j.state),
       available: fragment("SUM(CASE WHEN ? = 'available' THEN 1 ELSE 0 END)", j.state),
       scheduled: fragment("SUM(CASE WHEN ? = 'scheduled' THEN 1 ELSE 0 END)", j.state),
@@ -158,6 +163,11 @@ defmodule Oban.Web.WorkflowQuery do
       workflow_name: fragment("min(json_extract(?, '$.workflow_name'))", j.meta),
       total: count(),
       first_attempted_at: min(j.attempted_at),
+      first_inserted_at: min(j.inserted_at),
+      first_scheduled_at: min(j.scheduled_at),
+      last_cancelled_at: max(j.cancelled_at),
+      last_completed_at: max(j.completed_at),
+      last_discarded_at: max(j.discarded_at),
       executing: fragment("SUM(CASE WHEN ? = 'executing' THEN 1 ELSE 0 END)", j.state),
       available: fragment("SUM(CASE WHEN ? = 'available' THEN 1 ELSE 0 END)", j.state),
       scheduled: fragment("SUM(CASE WHEN ? = 'scheduled' THEN 1 ELSE 0 END)", j.state),
@@ -177,6 +187,11 @@ defmodule Oban.Web.WorkflowQuery do
       workflow_name: fragment("min(?->>'workflow_name')", j.meta),
       total: count(),
       first_attempted_at: min(j.attempted_at),
+      first_inserted_at: min(j.inserted_at),
+      first_scheduled_at: min(j.scheduled_at),
+      last_cancelled_at: max(j.cancelled_at),
+      last_completed_at: max(j.completed_at),
+      last_discarded_at: max(j.discarded_at),
       executing: fragment("count(*) FILTER (WHERE ? = 'executing')", j.state),
       available: fragment("count(*) FILTER (WHERE ? = 'available')", j.state),
       scheduled: fragment("count(*) FILTER (WHERE ? = 'scheduled')", j.state),
@@ -235,13 +250,120 @@ defmodule Oban.Web.WorkflowQuery do
       state: Workflow.aggregate_state(counts),
       counts: counts,
       started_at: row.first_attempted_at,
-      total_jobs: to_integer(row.total)
+      total_jobs: to_integer(row.total),
+      inserted_at: row.first_inserted_at,
+      scheduled_at: row.first_scheduled_at,
+      attempted_at: row.first_attempted_at,
+      cancelled_at: row.last_cancelled_at,
+      completed_at: row.last_completed_at,
+      discarded_at: row.last_discarded_at
     }
   end
 
   defp to_integer(%Decimal{} = val), do: Decimal.to_integer(val)
   defp to_integer(val) when is_integer(val), do: val
   defp to_integer(nil), do: 0
+
+  # Detail Queries
+
+  def get_workflow(conf, workflow_id) do
+    case all_workflows(%{ids: [workflow_id]}, conf) do
+      [workflow | _] -> workflow
+      [] -> nil
+    end
+  end
+
+  def workflow_jobs(params, conf, workflow_id) do
+    params = params_with_defaults(params)
+
+    query =
+      workflow_id
+      |> workflow_jobs_base(conf)
+      |> filter_job_states(params)
+      |> filter_job_queues(params)
+      |> filter_job_nodes(params, conf)
+      |> order_by([j], desc: j.id)
+      |> limit(^params.limit)
+
+    Repo.all(conf, query)
+  end
+
+  def workflow_job_filters(conf, workflow_id) do
+    query =
+      workflow_id
+      |> workflow_jobs_base(conf)
+      |> workflow_job_filters_select(conf)
+
+    rows = Repo.all(conf, query)
+
+    states =
+      rows
+      |> Enum.frequencies_by(& &1.state)
+      |> Enum.sort_by(fn {state, _} -> state end)
+
+    queues =
+      rows
+      |> Enum.frequencies_by(& &1.queue)
+      |> Enum.sort_by(fn {queue, _} -> queue end)
+
+    nodes =
+      rows
+      |> Enum.map(& &1.node)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.frequencies()
+      |> Enum.sort_by(fn {node, _} -> node end)
+
+    %{states: states, queues: queues, nodes: nodes}
+  end
+
+  defp workflow_jobs_base(workflow_id, conf) when is_mysql(conf) or is_sqlite(conf) do
+    Job
+    |> where([j], fragment("json_extract(?, '$.workflow_id')", j.meta) == ^workflow_id)
+  end
+
+  defp workflow_jobs_base(workflow_id, _conf) do
+    Job
+    |> where([j], fragment("?->>'workflow_id'", j.meta) == ^workflow_id)
+  end
+
+  defp workflow_job_filters_select(query, conf) when is_mysql(conf) or is_sqlite(conf) do
+    select(query, [j], %{
+      state: j.state,
+      queue: j.queue,
+      node: fragment("json_extract(?, '$[0]')", j.attempted_by)
+    })
+  end
+
+  defp workflow_job_filters_select(query, _conf) do
+    select(query, [j], %{
+      state: j.state,
+      queue: j.queue,
+      node: fragment("?[1]", j.attempted_by)
+    })
+  end
+
+  defp filter_job_states(query, %{states: states}) when is_list(states) and states != [] do
+    where(query, [j], j.state in ^states)
+  end
+
+  defp filter_job_states(query, _params), do: query
+
+  defp filter_job_queues(query, %{queues: queues}) when is_list(queues) and queues != [] do
+    where(query, [j], j.queue in ^queues)
+  end
+
+  defp filter_job_queues(query, _params), do: query
+
+  defp filter_job_nodes(query, %{nodes: nodes}, conf)
+       when is_list(nodes) and nodes != [] do
+    if is_mysql(conf) or is_sqlite(conf) do
+      where(query, [j], fragment("json_extract(?, '$[0]')", j.attempted_by) in ^nodes)
+    else
+      where(query, [j], fragment("?[1]", j.attempted_by) in ^nodes)
+    end
+  end
+
+  defp filter_job_nodes(query, _params, _conf), do: query
 
   # Sorting
 

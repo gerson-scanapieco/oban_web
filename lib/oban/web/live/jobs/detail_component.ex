@@ -205,7 +205,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
                 Workflow ID
               </span>
               <.link
-                patch={oban_path(:jobs, %{meta: [["workflow_id"], @workflow.id]})}
+                patch={oban_path([:workflows, @workflow.id])}
                 class="font-mono text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
               >
                 {@workflow.id}

@@ -136,6 +136,56 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
         assert workflow.counts["completed"] == 1
         assert workflow.total_jobs == 3
       end
+
+      test "populating inserted_at and scheduled_at timestamps" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id})
+
+        [workflow] = WorkflowQuery.all_workflows(%{ids: [wf_id]}, @conf)
+
+        assert %DateTime{} = workflow.inserted_at
+        assert %DateTime{} = workflow.scheduled_at
+      end
+
+      test "cancelled_at and discarded_at are nil when no jobs in those states" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "available")
+
+        [workflow] = WorkflowQuery.all_workflows(%{ids: [wf_id]}, @conf)
+
+        assert is_nil(workflow.cancelled_at)
+        assert is_nil(workflow.discarded_at)
+      end
+
+      test "populating cancelled_at when cancelled jobs exist" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{},
+          meta: %{workflow_id: wf_id},
+          state: "cancelled",
+          cancelled_at: DateTime.utc_now()
+        )
+
+        [workflow] = WorkflowQuery.all_workflows(%{ids: [wf_id]}, @conf)
+
+        assert %DateTime{} = workflow.cancelled_at
+      end
+
+      test "populating discarded_at when discarded jobs exist" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{},
+          meta: %{workflow_id: wf_id},
+          state: "discarded",
+          discarded_at: DateTime.utc_now()
+        )
+
+        [workflow] = WorkflowQuery.all_workflows(%{ids: [wf_id]}, @conf)
+
+        assert %DateTime{} = workflow.discarded_at
+      end
     end
 
     describe "dep_jobs/3" do
@@ -162,6 +212,89 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
       end
     end
 
+    describe "get_workflow/2" do
+      test "returning a single workflow by id" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id, workflow_name: "pipeline"})
+
+        workflow = WorkflowQuery.get_workflow(@conf, wf_id)
+
+        assert workflow.id == wf_id
+        assert workflow.name == "pipeline"
+      end
+
+      test "returning nil for non-existent workflow" do
+        assert is_nil(WorkflowQuery.get_workflow(@conf, Ecto.UUID.generate()))
+      end
+    end
+
+    describe "workflow_jobs/3" do
+      test "returning jobs for a workflow" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id})
+        insert!(%{}, meta: %{workflow_id: wf_id})
+        insert!(%{}, meta: %{workflow_id: Ecto.UUID.generate()})
+
+        jobs = WorkflowQuery.workflow_jobs(%{}, @conf, wf_id)
+
+        assert length(jobs) == 2
+      end
+
+      test "filtering jobs by state" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "available")
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "completed")
+
+        jobs = WorkflowQuery.workflow_jobs(%{states: ["available"]}, @conf, wf_id)
+
+        assert length(jobs) == 1
+        assert hd(jobs).state == "available"
+      end
+
+      test "filtering jobs by queue" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id}, queue: :alpha)
+        insert!(%{}, meta: %{workflow_id: wf_id}, queue: :beta)
+
+        jobs = WorkflowQuery.workflow_jobs(%{queues: ["alpha"]}, @conf, wf_id)
+
+        assert length(jobs) == 1
+        assert hd(jobs).queue == "alpha"
+      end
+    end
+
+    describe "workflow_job_filters/2" do
+      test "returning state counts for a workflow" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "available")
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "available")
+        insert!(%{}, meta: %{workflow_id: wf_id}, state: "completed")
+
+        filters = WorkflowQuery.workflow_job_filters(@conf, wf_id)
+
+        assert {"available", 2} in filters.states
+        assert {"completed", 1} in filters.states
+      end
+
+      test "returning queue counts for a workflow" do
+        wf_id = Ecto.UUID.generate()
+
+        insert!(%{}, meta: %{workflow_id: wf_id}, queue: :alpha)
+        insert!(%{}, meta: %{workflow_id: wf_id}, queue: :beta)
+        insert!(%{}, meta: %{workflow_id: wf_id}, queue: :beta)
+
+        filters = WorkflowQuery.workflow_job_filters(@conf, wf_id)
+
+        assert {"alpha", 1} in filters.queues
+        assert {"beta", 2} in filters.queues
+      end
+    end
+
     describe "parse/1" do
       import WorkflowQuery, only: [parse: 1]
 
@@ -177,6 +310,8 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
       {meta, opts} = Keyword.pop(opts, :meta, %{})
       {state, opts} = Keyword.pop(opts, :state, "available")
       {attempted_at, opts} = Keyword.pop(opts, :attempted_at)
+      {cancelled_at, opts} = Keyword.pop(opts, :cancelled_at)
+      {discarded_at, opts} = Keyword.pop(opts, :discarded_at)
 
       opts =
         opts
@@ -188,14 +323,13 @@ for repo <- [Oban.Web.Repo, Oban.Web.SQLiteRepo, Oban.Web.MyXQLRepo] do
       |> Oban.Job.new(opts)
       |> Ecto.Changeset.put_change(:meta, meta)
       |> Ecto.Changeset.put_change(:state, state)
-      |> then(fn cs ->
-        if attempted_at do
-          Ecto.Changeset.put_change(cs, :attempted_at, attempted_at)
-        else
-          cs
-        end
-      end)
+      |> maybe_put_change(:attempted_at, attempted_at)
+      |> maybe_put_change(:cancelled_at, cancelled_at)
+      |> maybe_put_change(:discarded_at, discarded_at)
       |> @repo.insert!()
     end
+
+    defp maybe_put_change(cs, _field, nil), do: cs
+    defp maybe_put_change(cs, field, value), do: Ecto.Changeset.put_change(cs, field, value)
   end
 end

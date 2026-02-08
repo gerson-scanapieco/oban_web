@@ -69,7 +69,7 @@ defmodule Oban.Web.Workflows.TableComponent do
       class="flex items-center hover:bg-gray-50 dark:hover:bg-gray-950/30"
     >
       <.link
-        patch={oban_path(:jobs, %{meta: [["workflow_id"], @workflow.id]})}
+        patch={oban_path([:workflows, @workflow.id])}
         class="py-5 pl-12 flex flex-grow items-center"
       >
         <div rel="name" class="w-1/4 font-semibold text-gray-700 dark:text-gray-300 truncate">

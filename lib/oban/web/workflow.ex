@@ -1,7 +1,20 @@
 defmodule Oban.Web.Workflow do
   @moduledoc false
 
-  defstruct [:id, :name, :state, :counts, :started_at, :total_jobs]
+  defstruct [
+    :id,
+    :name,
+    :state,
+    :counts,
+    :started_at,
+    :total_jobs,
+    :inserted_at,
+    :scheduled_at,
+    :attempted_at,
+    :cancelled_at,
+    :completed_at,
+    :discarded_at
+  ]
 
   @doc """
   Compute an aggregate workflow state from job state counts.
