@@ -13,6 +13,7 @@ defmodule Oban.Web.Workflows.DetailComponent do
     socket =
       socket
       |> assign(assigns)
+      |> assign_new(:graph_open?, fn -> true end)
       |> assign(show_less?: assigns.params.limit > @min_limit)
       |> assign(show_more?: assigns.params.limit < @max_limit)
 
@@ -76,6 +77,30 @@ defmodule Oban.Web.Workflows.DetailComponent do
         <TimelineComponent.render workflow={@workflow} os_time={@os_time} state="executing" />
         <TimelineComponent.render workflow={@workflow} os_time={@os_time} state="cancelled" />
         <TimelineComponent.render workflow={@workflow} os_time={@os_time} state="discarded" />
+      </div>
+
+      <div :if={@graph_nodes != []} class="border-b border-gray-200 dark:border-gray-700">
+        <button
+          type="button"
+          class="flex items-center w-full px-3 py-2 text-xs font-medium uppercase tracking-wider text-gray-400 dark:text-gray-600 hover:text-gray-600 dark:hover:text-gray-400 cursor-pointer"
+          phx-click="toggle-graph"
+          phx-target={@myself}
+        >
+          <Icons.chevron_down :if={@graph_open?} class="w-4 h-4 mr-1" />
+          <Icons.chevron_right :if={!@graph_open?} class="w-4 h-4 mr-1" />
+          Graph
+        </button>
+
+        <div
+          :if={@graph_open?}
+          id="workflow-graph"
+          phx-hook="WorkflowGraph"
+          data-graph={Jason.encode!(@graph_nodes)}
+          data-job-path-prefix={oban_path(:jobs)}
+          class="overflow-hidden"
+          style="height: 300px;"
+        >
+        </div>
       </div>
 
       <ul class="flex items-center border-b border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-600">
@@ -169,6 +194,10 @@ defmodule Oban.Web.Workflows.DetailComponent do
   end
 
   @impl Phoenix.LiveComponent
+  def handle_event("toggle-graph", _params, socket) do
+    {:noreply, assign(socket, graph_open?: !socket.assigns.graph_open?)}
+  end
+
   def handle_event("load-less", _params, socket) do
     if socket.assigns.show_less? do
       send(self(), {:params, :limit, -@inc_limit})

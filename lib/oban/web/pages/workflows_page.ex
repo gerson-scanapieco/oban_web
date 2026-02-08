@@ -36,6 +36,7 @@ defmodule Oban.Web.WorkflowsPage do
               module={DetailComponent}
               workflow={@detailed}
               jobs={@jobs}
+              graph_nodes={@graph_nodes}
               params={@params}
               resolver={@resolver}
               os_time={@os_time}
@@ -92,7 +93,7 @@ defmodule Oban.Web.WorkflowsPage do
     """
   end
 
-  @keep_on_mount ~w(default_params detailed filter_nodes filter_queues filter_states jobs os_time params workflows)a
+  @keep_on_mount ~w(default_params detailed filter_nodes filter_queues filter_states graph_nodes jobs os_time params workflows)a
 
   @impl Page
   def handle_mount(socket) do
@@ -107,6 +108,7 @@ defmodule Oban.Web.WorkflowsPage do
     |> assign_new(:filter_nodes, fn -> [] end)
     |> assign_new(:filter_queues, fn -> [] end)
     |> assign_new(:filter_states, fn -> [] end)
+    |> assign_new(:graph_nodes, fn -> [] end)
     |> assign_new(:jobs, fn -> [] end)
     |> assign_new(:os_time, fn -> System.os_time(:second) end)
     |> assign_new(:params, default)
@@ -144,10 +146,12 @@ defmodule Oban.Web.WorkflowsPage do
       workflow ->
         jobs = WorkflowQuery.workflow_jobs(params, conf, workflow.id)
         filters = WorkflowQuery.workflow_job_filters(conf, workflow.id)
+        graph_nodes = WorkflowQuery.workflow_graph(conf, workflow.id)
 
         assign(socket,
           detailed: workflow,
           jobs: jobs,
+          graph_nodes: graph_nodes,
           os_time: System.os_time(:second),
           filter_states: filters.states,
           filter_queues: filters.queues,
@@ -179,6 +183,7 @@ defmodule Oban.Web.WorkflowsPage do
         params = Map.merge(socket.assigns.default_params, params)
         jobs = WorkflowQuery.workflow_jobs(params, conf, workflow.id)
         filters = WorkflowQuery.workflow_job_filters(conf, workflow.id)
+        graph_nodes = WorkflowQuery.workflow_graph(conf, workflow.id)
 
         socket =
           socket
@@ -186,6 +191,7 @@ defmodule Oban.Web.WorkflowsPage do
           |> assign(
             detailed: workflow,
             jobs: jobs,
+            graph_nodes: graph_nodes,
             os_time: System.os_time(:second),
             params: params,
             filter_states: filters.states,
@@ -206,7 +212,14 @@ defmodule Oban.Web.WorkflowsPage do
     socket =
       socket
       |> assign(page_title: page_title("Workflows"))
-      |> assign(detailed: nil, jobs: [], filter_states: [], filter_queues: [], filter_nodes: [])
+      |> assign(
+        detailed: nil,
+        graph_nodes: [],
+        jobs: [],
+        filter_states: [],
+        filter_queues: [],
+        filter_nodes: []
+      )
       |> assign(params: Map.merge(socket.assigns.default_params, params))
       |> handle_refresh()
 

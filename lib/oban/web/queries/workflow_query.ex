@@ -264,6 +264,53 @@ defmodule Oban.Web.WorkflowQuery do
   defp to_integer(val) when is_integer(val), do: val
   defp to_integer(nil), do: 0
 
+  # Graph Query
+
+  def workflow_graph(conf, workflow_id) do
+    query = workflow_graph_query(conf, workflow_id)
+
+    conf
+    |> Repo.all(query)
+    |> Enum.map(&to_graph_node/1)
+  end
+
+  defp workflow_graph_query(conf, workflow_id) when is_mysql(conf) or is_sqlite(conf) do
+    Job
+    |> where([j], fragment("json_extract(?, '$.workflow_id')", j.meta) == ^workflow_id)
+    |> where([j], fragment("json_extract(?, '$.name') IS NOT NULL", j.meta))
+    |> select([j], %{
+      id: j.id,
+      state: j.state,
+      worker: j.worker,
+      name: fragment("json_extract(?, '$.name')", j.meta),
+      deps: fragment("json_extract(?, '$.deps')", j.meta)
+    })
+  end
+
+  defp workflow_graph_query(_conf, workflow_id) do
+    Job
+    |> where([j], fragment("?->>'workflow_id'", j.meta) == ^workflow_id)
+    |> where([j], fragment("? \\? 'name'", j.meta))
+    |> select([j], %{
+      id: j.id,
+      state: j.state,
+      worker: j.worker,
+      name: fragment("?->>'name'", j.meta),
+      deps: fragment("?->'deps'", j.meta)
+    })
+  end
+
+  defp to_graph_node(row) do
+    deps =
+      case row.deps do
+        nil -> []
+        list when is_list(list) -> list
+        json when is_binary(json) -> Jason.decode!(json)
+      end
+
+    %{id: row.id, name: row.name, deps: deps, state: row.state, worker: row.worker}
+  end
+
   # Detail Queries
 
   def get_workflow(conf, workflow_id) do
