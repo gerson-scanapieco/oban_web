@@ -221,7 +221,7 @@ function createZoomControls(container, pzInstance) {
   const zoomOut = document.createElement("button")
   zoomOut.textContent = "\u2212"
   zoomOut.setAttribute("type", "button")
-  zoomOut.style.cssText = `${btnStyle};${colors}border-radius:0 0 4px 4px;`
+  zoomOut.style.cssText = `${btnStyle};${colors}border-radius:0;border-bottom:none;`
 
   zoomIn.addEventListener("click", (e) => {
     e.stopPropagation()
@@ -239,9 +239,114 @@ function createZoomControls(container, pzInstance) {
     pzInstance.smoothZoom(cx, cy, 1 / ZOOM_FACTOR)
   })
 
+  const expandBtn = document.createElement("button")
+  expandBtn.setAttribute("type", "button")
+  expandBtn.style.cssText = `${btnStyle};${colors}border-radius:0 0 4px 4px;`
+  expandBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 17 3 17 5"/><polyline points="5 17 3 17 3 15"/><polyline points="17 15 17 17 15 17"/><polyline points="3 5 3 3 5 3"/></svg>`
+
+  expandBtn.addEventListener("click", (e) => {
+    e.stopPropagation()
+    openFullscreenGraph(container)
+  })
+
   wrapper.appendChild(zoomIn)
   wrapper.appendChild(zoomOut)
+  wrapper.appendChild(expandBtn)
   container.appendChild(wrapper)
+}
+
+function openFullscreenGraph(sourceContainer) {
+  const graphData = sourceContainer.dataset.graph
+  const jobPathPrefix = sourceContainer.dataset.jobPathPrefix
+  if (!graphData) return
+
+  const nodes = JSON.parse(graphData)
+  if (!nodes.length) return
+
+  const darkMode = isDarkMode()
+
+  // Backdrop
+  const backdrop = document.createElement("div")
+  backdrop.style.cssText = "position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;"
+
+  const bg = document.createElement("div")
+  bg.style.cssText = `position:absolute;inset:0;${darkMode ? "background:rgba(0,0,0,0.8);" : "background:rgba(0,0,0,0.5);"}`
+  backdrop.appendChild(bg)
+
+  // Modal panel
+  const panel = document.createElement("div")
+  panel.style.cssText = [
+    "position:relative",
+    "width:90vw",
+    "height:85vh",
+    "border-radius:8px",
+    "overflow:hidden",
+    "z-index:51",
+    `background:${darkMode ? "#111827" : "#ffffff"}`,
+    `border:1px solid ${darkMode ? "#374151" : "#d1d5db"}`,
+    "box-shadow:0 25px 50px -12px rgba(0,0,0,0.25)",
+  ].join(";")
+
+  // Close button
+  const closeBtn = document.createElement("button")
+  closeBtn.setAttribute("type", "button")
+  closeBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+  closeBtn.style.cssText = `position:absolute;top:12px;right:12px;z-index:52;cursor:pointer;padding:4px;border-radius:4px;border:none;background:transparent;${darkMode ? "color:#9ca3af;" : "color:#6b7280;"}`
+
+  const close = () => {
+    if (modalPz) modalPz.dispose()
+    backdrop.remove()
+    document.body.style.overflow = ""
+  }
+
+  closeBtn.addEventListener("click", close)
+  bg.addEventListener("click", close)
+
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") {
+      close()
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }
+  document.addEventListener("keydown", onKeyDown)
+
+  // Graph container inside modal
+  const graphContainer = document.createElement("div")
+  graphContainer.style.cssText = "width:100%;height:100%;position:relative;"
+
+  panel.appendChild(closeBtn)
+  panel.appendChild(graphContainer)
+  backdrop.appendChild(panel)
+  document.body.appendChild(backdrop)
+  document.body.style.overflow = "hidden"
+
+  // Render graph in modal
+  const g = layoutGraph(nodes)
+  const graph = g.graph()
+  const { graphGroup } = renderGraph(graphContainer, g, jobPathPrefix)
+
+  const modalPz = panzoom(graphGroup, {
+    smoothScroll: false,
+    bounds: true,
+    boundsPadding: 0.2,
+    maxZoom: 5,
+    minZoom: 0.1,
+  })
+
+  // Fit to modal
+  const cw = graphContainer.clientWidth
+  const ch = graphContainer.clientHeight
+  const gw = graph.width || 300
+  const gh = graph.height || 200
+
+  const sx = cw / gw
+  const sy = ch / gh
+  const scale = Math.min(sx, sy, 1)
+
+  modalPz.zoomAbs(0, 0, scale)
+  modalPz.moveTo((cw - gw * scale) / 2, (ch - gh * scale) / 2)
+
+  createZoomControls(graphContainer, modalPz)
 }
 
 function buildEdgePath(points) {
