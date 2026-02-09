@@ -25,7 +25,6 @@ defmodule Oban.Web.Workflows.TableComponent do
         <div class="ml-auto flex items-center space-x-6">
           <.col_header label="workflow id" class="w-44 text-left" />
           <.col_header label="jobs" class="w-16 text-right" />
-          <.col_header label="state" class="w-24 text-center" />
           <.col_header label="time" class="w-28 pr-3 text-right" />
         </div>
       </ul>
@@ -89,16 +88,6 @@ defmodule Oban.Web.Workflows.TableComponent do
             {integer_to_estimate(@workflow.total_jobs)}
           </span>
 
-          <span
-            rel="state"
-            class={[
-              "w-24 text-center text-xs font-medium rounded-full px-2 py-0.5",
-              state_class(@workflow.state)
-            ]}
-          >
-            {@workflow.state}
-          </span>
-
           <div
             class="w-28 pr-3 text-sm text-right tabular"
             data-timestamp={timestamp(@workflow)}
@@ -144,24 +133,6 @@ defmodule Oban.Web.Workflows.TableComponent do
 
     {:noreply, socket}
   end
-
-  defp state_class("executing"),
-    do: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-
-  defp state_class("completed"),
-    do: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-
-  defp state_class("available"),
-    do: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-
-  defp state_class("retryable"),
-    do: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-
-  defp state_class("cancelled"),
-    do: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-
-  defp state_class("discarded"), do: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-  defp state_class(_state), do: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
 
   defp timestamp(%{started_at: nil}), do: "-"
 

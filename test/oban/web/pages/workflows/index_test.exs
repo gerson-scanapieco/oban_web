@@ -14,8 +14,15 @@ defmodule Oban.Web.Pages.Workflows.IndexTest do
   test "viewing workflows with jobs", %{live: live} do
     wf_id = Ecto.UUID.generate()
 
-    insert_job!(%{}, meta: %{workflow_id: wf_id, workflow_name: "my_pipeline"})
-    insert_job!(%{}, meta: %{workflow_id: wf_id, workflow_name: "my_pipeline"})
+    insert_job!(%{},
+      state: "executing",
+      meta: %{workflow_id: wf_id, workflow_name: "my_pipeline"}
+    )
+
+    insert_job!(%{},
+      state: "executing",
+      meta: %{workflow_id: wf_id, workflow_name: "my_pipeline"}
+    )
 
     refresh(live)
 
@@ -31,7 +38,10 @@ defmodule Oban.Web.Pages.Workflows.IndexTest do
   test "sorting workflows by different properties", %{live: live} do
     wf_id = Ecto.UUID.generate()
 
-    insert_job!(%{}, meta: %{workflow_id: wf_id, workflow_name: "test"})
+    insert_job!(%{},
+      state: "executing",
+      meta: %{workflow_id: wf_id, workflow_name: "test"}
+    )
 
     refresh(live)
 
@@ -40,7 +50,10 @@ defmodule Oban.Web.Pages.Workflows.IndexTest do
     for mode <- ~w(name total) do
       change_sort(live, mode)
 
-      assert_patch(live, workflows_path(limit: 20, sort_by: mode, sort_dir: "desc"))
+      assert_patch(
+        live,
+        workflows_path(limit: 20, sort_by: mode, sort_dir: "desc", states: "executing")
+      )
     end
   end
 
@@ -52,7 +65,10 @@ defmodule Oban.Web.Pages.Workflows.IndexTest do
     test "loading more workflows", %{live: live} do
       wf_id = Ecto.UUID.generate()
 
-      insert_job!(%{}, meta: %{workflow_id: wf_id, workflow_name: "test"})
+      insert_job!(%{},
+        state: "executing",
+        meta: %{workflow_id: wf_id, workflow_name: "test"}
+      )
 
       refresh(live)
 
@@ -68,7 +84,10 @@ defmodule Oban.Web.Pages.Workflows.IndexTest do
 
       wf_id = Ecto.UUID.generate()
 
-      insert_job!(%{}, meta: %{workflow_id: wf_id, workflow_name: "test"})
+      insert_job!(%{},
+        state: "executing",
+        meta: %{workflow_id: wf_id, workflow_name: "test"}
+      )
 
       refresh(live)
 

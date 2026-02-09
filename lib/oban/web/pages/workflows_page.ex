@@ -45,8 +45,9 @@ defmodule Oban.Web.WorkflowsPage do
         </div>
       <% else %>
         <SidebarComponent.sidebar
-          workflows={@workflows}
+          state_counts={@state_counts}
           params={without_defaults(@params, @default_params)}
+          active_states={@params[:states]}
           width={@sidebar_width}
           csp_nonces={@csp_nonces}
         />
@@ -93,11 +94,11 @@ defmodule Oban.Web.WorkflowsPage do
     """
   end
 
-  @keep_on_mount ~w(default_params detailed filter_nodes filter_queues filter_states graph_nodes jobs os_time params workflows)a
+  @keep_on_mount ~w(default_params detailed filter_nodes filter_queues filter_states graph_nodes jobs os_time params state_counts workflows)a
 
   @impl Page
   def handle_mount(socket) do
-    default = fn -> %{limit: 20, sort_by: "time", sort_dir: "desc"} end
+    default = fn -> %{limit: 20, sort_by: "time", sort_dir: "desc", states: ["executing"]} end
 
     assigns =
       Map.drop(socket.assigns, @keep_on_mount)
@@ -112,6 +113,7 @@ defmodule Oban.Web.WorkflowsPage do
     |> assign_new(:jobs, fn -> [] end)
     |> assign_new(:os_time, fn -> System.os_time(:second) end)
     |> assign_new(:params, default)
+    |> assign_new(:state_counts, fn -> %{} end)
     |> assign_new(:workflows, fn -> [] end)
   end
 
@@ -128,12 +130,11 @@ defmodule Oban.Web.WorkflowsPage do
     conf = socket.assigns.conf
     params = socket.assigns.params
 
-    workflows =
-      params
-      |> WorkflowQuery.all_workflows(conf)
-      |> filter_by_states(params)
+    all_workflows = WorkflowQuery.all_workflows(params, conf)
+    state_counts = Enum.frequencies_by(all_workflows, & &1.state)
+    workflows = filter_by_states(all_workflows, params)
 
-    assign(socket, workflows: workflows)
+    assign(socket, workflows: workflows, state_counts: state_counts)
   end
 
   defp refresh_detail(socket) do
@@ -180,7 +181,8 @@ defmodule Oban.Web.WorkflowsPage do
         {:noreply, push_patch(socket, to: oban_path(:workflows), replace: true)}
 
       workflow ->
-        params = Map.merge(socket.assigns.default_params, params)
+        detail_defaults = Map.delete(socket.assigns.default_params, :states)
+        params = Map.merge(detail_defaults, params)
         jobs = WorkflowQuery.workflow_jobs(params, conf, workflow.id)
         filters = WorkflowQuery.workflow_job_filters(conf, workflow.id)
         graph_nodes = WorkflowQuery.workflow_graph(conf, workflow.id)

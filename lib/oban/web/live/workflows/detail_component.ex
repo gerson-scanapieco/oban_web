@@ -87,8 +87,7 @@ defmodule Oban.Web.Workflows.DetailComponent do
           phx-target={@myself}
         >
           <Icons.chevron_down :if={@graph_open?} class="w-4 h-4 mr-1" />
-          <Icons.chevron_right :if={!@graph_open?} class="w-4 h-4 mr-1" />
-          Graph
+          <Icons.chevron_right :if={!@graph_open?} class="w-4 h-4 mr-1" /> Graph
         </button>
 
         <div

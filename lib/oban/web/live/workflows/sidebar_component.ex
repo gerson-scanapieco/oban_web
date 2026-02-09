@@ -3,8 +3,11 @@ defmodule Oban.Web.Workflows.SidebarComponent do
 
   alias Oban.Web.SidebarComponents
 
-  attr :workflows, :list
+  @all_states ~w(executing available scheduled retryable cancelled discarded completed)
+
+  attr :state_counts, :map
   attr :params, :map
+  attr :active_states, :any
   attr :csp_nonces, :map
   attr :width, :integer, default: 320
 
@@ -13,20 +16,11 @@ defmodule Oban.Web.Workflows.SidebarComponent do
     <SidebarComponents.sidebar width={@width} csp_nonces={@csp_nonces}>
       <SidebarComponents.section name="states" headers={~w(count)}>
         <SidebarComponents.filter_row
-          :for={{state, count} <- states(@workflows)}
+          :for={{state, count} <- states(@state_counts)}
           name={state}
-          active={active_filter?(@params, :states, state)}
-          patch={patch_params(@params, :workflows, :states, state)}
-          values={[count]}
-        />
-      </SidebarComponents.section>
-
-      <SidebarComponents.section name="names" headers={~w(count)}>
-        <SidebarComponents.filter_row
-          :for={{name, count} <- names(@workflows)}
-          name={name}
-          active={active_filter?(@params, :names, name)}
-          patch={patch_params(@params, :workflows, :names, name)}
+          active={state_active?(@active_states, state)}
+          exclusive={true}
+          patch={state_patch(@params, @active_states, state)}
           values={[count]}
         />
       </SidebarComponents.section>
@@ -34,16 +28,22 @@ defmodule Oban.Web.Workflows.SidebarComponent do
     """
   end
 
-  defp states(workflows) do
-    workflows
-    |> Enum.frequencies_by(& &1.state)
-    |> Enum.sort_by(fn {state, _} -> state end)
+  defp states(counts) do
+    Enum.map(@all_states, fn state -> {state, Map.get(counts, state, 0)} end)
   end
 
-  defp names(workflows) do
-    workflows
-    |> Enum.reject(&is_nil(&1.name))
-    |> Enum.frequencies_by(& &1.name)
-    |> Enum.sort_by(fn {name, _} -> name end)
+  defp state_active?(active, state) do
+    active == state or active == [state]
+  end
+
+  defp state_patch(params, active, state) do
+    params =
+      if state_active?(active, state) do
+        Map.delete(params, :states)
+      else
+        Map.put(params, :states, state)
+      end
+
+    oban_path(:workflows, params)
   end
 end
