@@ -412,6 +412,8 @@ const WorkflowGraph = {
       boundsPadding: 0.2,
       maxZoom: 3,
       minZoom: 0.3,
+      beforeWheel: () => true,
+      beforeMouseDown: () => true,
     })
 
     if (savedTransform) {
