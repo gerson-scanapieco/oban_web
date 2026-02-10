@@ -145,10 +145,13 @@ defmodule Oban.Web.Layouts do
   end
 
   def nav(assigns) do
+    in_postgres = assigns.conf.engine not in [Oban.Engines.Dolphin, Oban.Engines.Lite]
+    assigns = assign(assigns, :postgres?, in_postgres)
+
     ~H"""
     <nav class="flex space-x-2">
       <.link
-        :for={page <- [:jobs, :queues, :workflows]}
+        :for={page <- [:jobs, :queues]}
         class={link_class(@page, page)}
         data-shortcut={JS.patch(oban_path(page))}
         id={"nav-#{page}"}
@@ -157,6 +160,25 @@ defmodule Oban.Web.Layouts do
       >
         {String.capitalize(to_string(page))}
       </.link>
+      <.link
+        :if={@postgres?}
+        class={link_class(@page, :workflows)}
+        data-shortcut={JS.patch(oban_path(:workflows))}
+        id="nav-workflows"
+        patch={oban_path(:workflows)}
+        title="Navigate to Workflows"
+      >
+        Workflows
+      </.link>
+      <span
+        :if={!@postgres?}
+        class={disabled_link_class()}
+        data-title="Workflows require PostgreSQL"
+        id="nav-workflows"
+        phx-hook="Tippy"
+      >
+        Workflows
+      </span>
     </nav>
     """
   end
@@ -196,6 +218,10 @@ defmodule Oban.Web.Layouts do
       {@name} {if @version, do: "v#{@version}", else: "–"}
     </span>
     """
+  end
+
+  defp disabled_link_class do
+    "font-semibold text-sm rounded-md px-3 py-2 text-gray-400 dark:text-gray-600 cursor-not-allowed"
   end
 
   defp link_class(curr, page) do

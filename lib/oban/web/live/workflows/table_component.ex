@@ -140,7 +140,7 @@ defmodule Oban.Web.Workflows.TableComponent do
     DateTime.to_unix(started_at, :millisecond)
   end
 
-  defp relative_mode(%{state: "executing"}), do: "duration"
+  defp relative_mode(%{state: :executing}), do: "duration"
   defp relative_mode(_workflow), do: "words"
 
   defp loader_class(true) do

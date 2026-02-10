@@ -82,10 +82,10 @@ defmodule Oban.Web.Workflows.TimelineComponent do
 
   defp timestamp_name(state, workflow) do
     case {state, workflow.state} do
-      {"executing", state} when state in ~w(executing available retryable scheduled) ->
+      {"executing", :executing} ->
         "Executing"
 
-      {"executing", "completed"} ->
+      {"executing", :completed} ->
         "Completed"
 
       {"executing", _} ->
@@ -105,7 +105,7 @@ defmodule Oban.Web.Workflows.TimelineComponent do
       {_, _, nil} ->
         @empty_time
 
-      {"executing", wf_state, at} when wf_state in ~w(executing available retryable scheduled) ->
+      {"executing", :executing, at} ->
         at
         |> DateTime.diff(now)
         |> Timing.to_duration()
@@ -122,18 +122,18 @@ defmodule Oban.Web.Workflows.TimelineComponent do
 
   defp absolute_state("executing", workflow) do
     case workflow.state do
-      "completed" -> :finished
-      state when state in ~w(executing available retryable scheduled) -> :started
+      :completed -> :finished
+      :executing -> :started
       _ -> :unstarted
     end
   end
 
   defp absolute_state("cancelled", workflow) do
-    if workflow.state == "cancelled", do: :finished, else: :unstarted
+    if workflow.state == :cancelled, do: :finished, else: :unstarted
   end
 
   defp absolute_state("discarded", workflow) do
-    if workflow.state == "discarded", do: :finished, else: :unstarted
+    if workflow.state == :discarded, do: :finished, else: :unstarted
   end
 
   defp truncate_sec(nil), do: @empty_time

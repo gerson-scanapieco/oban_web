@@ -230,9 +230,9 @@ defmodule Oban.Web.Workflows.DetailComponent do
   defp wf_run_time(workflow, os_time) do
     finished_at =
       case workflow.state do
-        "completed" -> workflow.completed_at
-        "cancelled" -> workflow.cancelled_at
-        "discarded" -> workflow.discarded_at
+        :completed -> workflow.completed_at
+        :cancelled -> workflow.cancelled_at
+        :discarded -> workflow.discarded_at
         _ -> DateTime.from_unix!(os_time)
       end
 

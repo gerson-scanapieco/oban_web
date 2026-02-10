@@ -345,9 +345,7 @@ defmodule Oban.Web.Jobs.DetailComponent do
     end
   end
 
-  defp resolve_workflow(%{job: %{meta: meta}, conf: conf})
-       when is_map_key(meta, "workflow_id") do
-    wf_id = meta["workflow_id"]
+  defp resolve_workflow(%{job: %{meta: %{"workflow_id" => wf_id} = meta}, conf: conf}) do
     deps = meta["deps"] || []
 
     dep_list =

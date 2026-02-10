@@ -98,7 +98,7 @@ defmodule Oban.Web.WorkflowsPage do
 
   @impl Page
   def handle_mount(socket) do
-    default = fn -> %{limit: 20, sort_by: "time", sort_dir: "desc", states: ["executing"]} end
+    default = fn -> %{limit: 20, sort_by: "time", sort_dir: "desc", states: [:executing]} end
 
     assigns =
       Map.drop(socket.assigns, @keep_on_mount)
@@ -162,10 +162,15 @@ defmodule Oban.Web.WorkflowsPage do
   end
 
   defp filter_by_states(workflows, %{states: states}) when is_list(states) and states != [] do
+    states = Enum.map(states, &to_existing_atom/1)
+
     Enum.filter(workflows, &(&1.state in states))
   end
 
   defp filter_by_states(workflows, _params), do: workflows
+
+  defp to_existing_atom(val) when is_atom(val), do: val
+  defp to_existing_atom(val) when is_binary(val), do: String.to_existing_atom(val)
 
   @impl Page
   def handle_params(%{"id" => workflow_id} = params, _uri, socket) do

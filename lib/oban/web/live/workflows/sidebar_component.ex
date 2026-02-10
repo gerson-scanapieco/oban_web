@@ -3,7 +3,7 @@ defmodule Oban.Web.Workflows.SidebarComponent do
 
   alias Oban.Web.SidebarComponents
 
-  @all_states ~w(executing available scheduled retryable cancelled discarded completed)
+  @all_states ~w(executing completed cancelled discarded)a
 
   attr :state_counts, :map
   attr :params, :map
@@ -29,7 +29,7 @@ defmodule Oban.Web.Workflows.SidebarComponent do
   end
 
   defp states(counts) do
-    Enum.map(@all_states, fn state -> {state, Map.get(counts, state, 0)} end)
+    Enum.map(@all_states, fn state -> {Atom.to_string(state), Map.get(counts, state, 0)} end)
   end
 
   defp state_active?(active, state) do

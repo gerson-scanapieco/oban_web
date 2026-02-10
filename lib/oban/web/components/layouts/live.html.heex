@@ -11,7 +11,7 @@
       <.logo path={@logo_path} />
     </div>
 
-    <.nav socket={@socket} page={@page.name} />
+    <.nav socket={@socket} page={@page.name} conf={@conf} />
 
     <div class="ml-auto flex items-center space-x-3">
       <.live_component module={Oban.Web.ShortcutsComponent} id="shortcuts" />
