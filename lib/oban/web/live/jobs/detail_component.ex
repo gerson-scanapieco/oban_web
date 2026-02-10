@@ -2,7 +2,15 @@ defmodule Oban.Web.Jobs.DetailComponent do
   use Oban.Web, :live_component
 
   alias Oban.Web.Jobs.TimelineComponent
-  alias Oban.Web.{Resolver, Timing}
+  alias Oban.Web.{Resolver, Timing, WorkflowQuery}
+
+  @impl Phoenix.LiveComponent
+  def update(assigns, socket) do
+    socket = assign(socket, assigns)
+    workflow = resolve_workflow(socket.assigns)
+
+    {:ok, assign(socket, workflow: workflow)}
+  end
 
   @impl Phoenix.LiveComponent
   def render(assigns) do
@@ -179,6 +187,79 @@ defmodule Oban.Web.Jobs.DetailComponent do
         <pre class="font-mono text-sm text-gray-500 dark:text-gray-400 whitespace-pre-wrap break-all">{format_meta(@job, @resolver)}</pre>
       </div>
 
+      <%= if @workflow do %>
+        <div class="px-3 py-6 border-t border-gray-200 dark:border-gray-700">
+          <h3 class="flex font-semibold mb-3 space-x-2 text-gray-400">
+            <Icons.square_stack />
+            <span>Workflow</span>
+          </h3>
+          <div class="text-sm text-gray-600 dark:text-gray-300 space-y-2">
+            <div>
+              <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                Workflow Name
+              </span>
+              {@workflow.name || "—"}
+            </div>
+            <div>
+              <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                Workflow ID
+              </span>
+              <.link
+                patch={oban_path([:workflows, @workflow.id])}
+                class="font-mono text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+              >
+                {@workflow.id}
+              </.link>
+            </div>
+            <%= if Enum.any?(@workflow.deps) do %>
+              <div class="mt-4">
+                <span class="uppercase font-semibold text-sm text-gray-500 dark:text-gray-400">
+                  Dependencies
+                </span>
+                <div class="mt-2 space-y-2">
+                  <%= for dep <- @workflow.deps do %>
+                    <%= if dep.job_id do %>
+                      <.link
+                        patch={oban_path([:jobs, dep.job_id])}
+                        class="flex items-center space-x-4 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                      >
+                        <span>
+                          <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                            Name
+                          </span>
+                          {dep.name}
+                        </span>
+                        <span>
+                          <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                            ID
+                          </span>
+                          <span class="font-mono text-xs">{dep.job_id}</span>
+                        </span>
+                      </.link>
+                    <% else %>
+                      <div class="flex items-center space-x-4">
+                        <span>
+                          <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                            Name
+                          </span>
+                          {dep.name}
+                        </span>
+                        <span>
+                          <span class="uppercase font-semibold text-xs text-gray-500 dark:text-gray-400 mr-1">
+                            ID
+                          </span>
+                          <span class="font-mono text-xs text-gray-500 dark:text-gray-400">—</span>
+                        </span>
+                      </div>
+                    <% end %>
+                  <% end %>
+                </div>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
       <%= if @job.meta["recorded"] do %>
         <div class="px-3 py-6 border-t border-gray-200 dark:border-gray-700">
           <h3 class="flex font-semibold mb-3 space-x-2">
@@ -263,4 +344,20 @@ defmodule Oban.Web.Jobs.DetailComponent do
         "No Recording Yet"
     end
   end
+
+  defp resolve_workflow(%{job: %{meta: %{"workflow_id" => wf_id} = meta}, conf: conf}) do
+    deps = meta["deps"] || []
+
+    dep_list =
+      if is_list(deps) and deps != [] do
+        dep_map = WorkflowQuery.dep_jobs(conf, wf_id, deps)
+        Enum.map(deps, fn name -> %{name: name, job_id: dep_map[name]} end)
+      else
+        []
+      end
+
+    %{id: wf_id, name: meta["workflow_name"], deps: dep_list}
+  end
+
+  defp resolve_workflow(_assigns), do: nil
 end
